@@ -1,0 +1,245 @@
+<!doctype html>
+<html lang="ja">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<meta name="theme-color" content="#0b1030">
+<meta name="apple-mobile-web-app-capable" content="yes">
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+<link rel="manifest" href="manifest.webmanifest">
+<link rel="apple-touch-icon" href="icon-192.png">
+<title>Taskbar Cosmos おでかけ</title>
+<!--
+  Taskbar Cosmos「おでかけページ」の見本 (見本なので、見た目は自由に作りかえてよい)。
+  約束 (券の形・返し方・光の計算・歩数) は docs/PHONE_LINK.md。
+  外で使うには https の場所に置く (tools/PhoneSite の make_site.py で、置くファイル一式ができる)。
+  一度開けば、電波がなくても開ける (サービスワーカー。https のときだけ)。
+  このファイルはゲームの中にも入っていて、家の Wi-Fi なら http://<PC>:51737/outside.html で開ける (ためし用。外では開けない)。
+-->
+<style>
+  :root { --bg1:#0b1030; --text:#eef2ff; --dim:#a3aed0; --faint:#6e7899; --gold:#ffd36b; --cyan:#8ce0ff; --card:rgba(26,34,70,.85); --line:rgba(255,255,255,.12); }
+  * { box-sizing:border-box; -webkit-tap-highlight-color:transparent; }
+  body { margin:0; min-height:100vh; font-family:"Hiragino Sans","Yu Gothic UI","Segoe UI",system-ui,sans-serif; color:var(--text);
+         background:radial-gradient(ellipse at 50% 30%, #2a2466 0%, var(--bg1) 60%) fixed, var(--bg1);
+         display:flex; flex-direction:column; align-items:center; padding:max(16px, env(safe-area-inset-top)) 16px 28px; user-select:none; -webkit-user-select:none; touch-action:manipulation; }
+  h1 { font-size:15px; margin:0; font-weight:600; width:100%; max-width:440px; display:flex; align-items:center; gap:8px; }
+  h1 .net { margin-left:auto; font-size:11px; font-weight:600; color:var(--faint); }
+  #main, #play { width:100%; max-width:440px; display:flex; flex-direction:column; align-items:center; }
+  .light { margin-top:18px; text-align:center; }
+  .label { color:var(--faint); font-size:12px; font-weight:600; }
+  .num { font-size:44px; font-weight:700; color:#fff6dd; text-shadow:0 0 18px rgba(255,211,107,.35); }
+  .rate { color:var(--dim); font-size:14px; }
+  #star { margin:18px 0 6px; width:200px; height:200px; border:none; background:none; padding:0; position:relative; }
+  #star svg { width:100%; height:100%; filter:drop-shadow(0 0 22px rgba(140,224,255,.5)); transition:transform .08s; }
+  #star:active svg { transform:scale(.93); }
+  .pop { position:absolute; left:50%; top:40%; color:var(--gold); font-weight:700; font-size:18px; pointer-events:none; animation:up .9s ease-out forwards; }
+  @keyframes up { from { opacity:1; transform:translate(-50%,0); } to { opacity:0; transform:translate(-50%,-70px); } }
+  .card { width:100%; max-width:440px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin-top:12px; }
+  .card h2 { margin:0 0 6px; font-size:13px; color:var(--gold); font-weight:600; }
+  .card p { margin:0; color:var(--dim); font-size:13px; line-height:1.55; white-space:pre-line; }
+  .walk { display:flex; align-items:center; gap:12px; }
+  .walk .steps { font-size:30px; font-weight:700; color:var(--cyan); min-width:90px; }
+  .walk .sub { color:var(--dim); font-size:12.5px; line-height:1.5; }
+  button.act { margin-top:12px; width:100%; border:none; border-radius:12px; padding:13px; font-size:15px; font-weight:700; font-family:inherit; color:#241a00; background:linear-gradient(#ffe29a,#ffc94d); }
+  button.sub { background:rgba(255,255,255,.08); color:var(--text); border:1px solid var(--line); }
+  button.on { background:linear-gradient(#b8f0ff,#6fd3ff); color:#062030; }
+  label.chk { display:flex; align-items:center; gap:8px; margin-top:10px; color:var(--dim); font-size:12.5px; }
+</style>
+</head>
+<body>
+<h1><span id="title">Taskbar Cosmos</span><span class="net" id="net"></span></h1>
+
+<div id="play" style="display:none">
+  <div class="light">
+    <div class="label" id="tLight"></div>
+    <div class="num" id="light">…</div>
+    <div class="rate" id="rate"></div>
+  </div>
+  <button id="star" aria-label="star">
+    <svg viewBox="0 0 100 100"><defs><radialGradient id="g" cx="50%" cy="45%" r="55%"><stop offset="0" stop-color="#f4fbff"/><stop offset=".55" stop-color="#8ce0ff"/><stop offset="1" stop-color="#6b7bff"/></radialGradient></defs>
+      <circle cx="50" cy="50" r="30" fill="url(#g)"/>
+      <path d="M50 8 L56 44 L92 50 L56 56 L50 92 L44 56 L8 50 L44 44 Z" fill="#ffffff" opacity=".9"/></svg>
+  </button>
+  <div class="card">
+    <h2 id="tWalk"></h2>
+    <div class="walk"><div class="steps" id="steps">0</div><div class="sub" id="walkText"></div></div>
+    <button class="act sub" id="walkBtn"></button>
+    <label class="chk"><input type="checkbox" id="keepOn"><span id="tKeep"></span></label>
+  </div>
+  <div class="card">
+    <h2 id="tOut"></h2>
+    <p id="outText"></p>
+    <button class="act" id="backBtn"></button>
+  </div>
+</div>
+
+<div class="card" id="none" style="display:none"><h2 id="tNone"></h2><p id="noneText"></p></div>
+
+<script>
+"use strict";
+const T = {
+  ja: { title:"おでかけ", light:"光 (PC に返すと入る)", perSec:"毎秒 +{0}", out:"おでかけ中",
+        outText:"持ち出してから {0}。放置のぶん +{1}・タップ {2} 回 +{3}・{4} 歩 +{5}。\n家に帰ったら、PC と同じ Wi-Fi で「PC に返す」を押してください。",
+        full:"(放置で光が集まるのは {0} 時間までです)", back:"PC に返す (家の Wi-Fi で)",
+        walk:"歩いて光を集める", walkOn:"歩数を数えています。1 歩でタップ {0} 回ぶん。ページを開いているあいだだけ数えます (画面が消えると止まります)。",
+        walkOff:"「歩数を数える」を押すと、1 歩でタップ {0} 回ぶんの光が入ります。", walkStart:"歩数を数える", walkStop:"数えるのをやめる",
+        walkNo:"このスマホ (ブラウザー) では歩数を数えられません", walkDenied:"動きのセンサーが許可されませんでした (設定で許可してください)",
+        keep:"歩くあいだ、画面を消さない", online:"オンライン", offline:"オフライン (このまま遊べます)",
+        none:"持ち出していません", noneText:"PC と同じ Wi-Fi で、スマホのページの「スマホに持ち出す」を押すと、ここで遊べます。",
+        sent:"PC に返しに行きました。PC のページに「おかえりなさい」が出たら終わりです。うまくいかなかったら、もう一度押せます。" },
+  en: { title:"Outing", light:"Light (goes into the PC when returned)", perSec:"+{0} per sec", out:"Out with you",
+        outText:"Out for {0}. +{1} while away · {2} taps +{3} · {4} steps +{5}.\nBack home, on the same Wi-Fi as the PC, press \"Return to PC\".",
+        full:"(Time away counts for up to {0} hours)", back:"Return to PC (home Wi-Fi)",
+        walk:"Walk to gather light", walkOn:"Counting steps. One step = {0} taps. Only while this page is open (it stops when the screen turns off).",
+        walkOff:"Press \"Count my steps\" and each step gives {0} taps of light.", walkStart:"Count my steps", walkStop:"Stop counting",
+        walkNo:"This phone (browser) cannot count steps", walkDenied:"Motion sensor access was not allowed (allow it in settings)",
+        keep:"Keep the screen on while walking", online:"online", offline:"offline (you can keep playing)",
+        none:"Nothing taken out", noneText:"On the same Wi-Fi as the PC, press \"Take it on my phone\" on the phone page to play here.",
+        sent:"Sent back to the PC. When the PC page says \"Welcome back\", you're done. If it failed, you can press it again." },
+};
+const $ = id => document.getElementById(id);
+
+// ---- 電波がなくても開けるように (https のときだけ。サービスワーカーが、このページのファイルを覚えておく) ----
+if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWorker.register("sw.js").catch(() => { });
+
+// ---- 大きな数 (ゲームの数は 1e308 をこえるので、log10 で持つ) ----
+const lg = s => { if (!s || s === "0") return -Infinity; const i = s.indexOf("e"); return i < 0 ? Math.log10(+s) : Math.log10(+s.slice(0, i)) + (+s.slice(i + 1)); };
+const lgAdd = (a, b) => { if (a === -Infinity) return b; if (b === -Infinity) return a; const hi = Math.max(a, b), lo = Math.min(a, b); return hi + Math.log10(1 + Math.pow(10, lo - hi)); };
+const SUF = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+function fmt(l) {
+  if (l === -Infinity) return "0";
+  if (l < 3) return (Math.floor(Math.pow(10, l) * 10) / 10).toString();
+  const g = Math.floor(l / 3);
+  if (g < SUF.length) return (Math.pow(10, l - g * 3)).toFixed(2) + SUF[g];
+  const e = Math.floor(l); return (Math.pow(10, l - e)).toFixed(2) + "e" + e;
+}
+const dur = s => { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ":" : "") + String(m).padStart(h ? 2 : 1, "0") + ":" + String(x).padStart(2, "0"); };
+const b64url = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
+const unb64url = s => { s = s.replace(/-/g, "+").replace(/_/g, "/"); return decodeURIComponent(escape(atob(s + "===".slice((s.length + 3) % 4)))); };
+const clearTicket = () => ["tcosmos.ticket", "tcosmos.taps", "tcosmos.steps", "tcosmos.sent"].forEach(k => localStorage.removeItem(k));
+
+// ---- 券を受け取る (#out=...) / 返し終わった知らせ (#done=<id>) ----
+if (location.hash.startsWith("#out=")) {
+  try {
+    const tk = JSON.parse(unb64url(location.hash.slice(5)));
+    if (tk.v === 1 && tk.id && tk.key && tk.home) { clearTicket(); localStorage.setItem("tcosmos.ticket", JSON.stringify(tk)); }
+  } catch (e) { }
+  history.replaceState(null, "", location.pathname + location.search);
+} else if (location.hash.startsWith("#done=")) {
+  try {
+    const id = decodeURIComponent(location.hash.slice(6));
+    const old = JSON.parse(localStorage.getItem("tcosmos.ticket") || "null");
+    if (old && old.id === id) clearTicket();
+  } catch (e) { }
+  history.replaceState(null, "", location.pathname + location.search);
+}
+let tk = null; try { tk = JSON.parse(localStorage.getItem("tcosmos.ticket") || "null"); } catch (e) { }
+let taps = +(localStorage.getItem("tcosmos.taps") || 0);
+let steps = +(localStorage.getItem("tcosmos.steps") || 0);
+const lang = tk && tk.lang === "en" ? "en" : (tk ? "ja" : ((navigator.language || "ja").startsWith("ja") ? "ja" : "en"));
+const t = (k, ...a) => (T[lang][k] || k).replace(/\{(\d)\}/g, (_, i) => a[+i]);
+const stepClicks = tk && tk.stepClicks ? tk.stepClicks : 5;
+document.title = "Taskbar Cosmos " + t("title");
+
+function tick() {
+  if (!tk) return;
+  const real = Math.max(0, (Date.now() - tk.start) / 1000);
+  const sec = Math.min(tk.maxHours * 3600, real);
+  const idle = sec > 0 ? lg(tk.lps) + Math.log10(sec * tk.eff) : -Infinity;
+  const tapL = taps > 0 ? lg(tk.click) + Math.log10(taps) : -Infinity;
+  const stepL = steps > 0 ? lg(tk.click) + Math.log10(steps * stepClicks) : -Infinity;
+  const gain = lgAdd(idle, lgAdd(tapL, stepL));
+  $("light").textContent = fmt(lgAdd(lg(tk.light), gain));
+  $("rate").textContent = t("perSec", fmt(lg(tk.lps) + Math.log10(tk.eff)));
+  $("steps").textContent = steps;
+  $("outText").textContent = t("outText", dur(real), fmt(idle), taps, fmt(tapL), steps, fmt(stepL)) +
+    (real > tk.maxHours * 3600 ? " " + t("full", tk.maxHours) : "") +
+    (localStorage.getItem("tcosmos.sent") ? "\n" + t("sent") : "");
+  $("net").textContent = navigator.onLine ? t("online") : t("offline");
+}
+
+// ---- 歩数 (スマホの動きのセンサー。ページを開いて画面がついているあいだだけ) ----
+// 加速度の大きさをならして、重力のぶん (ゆっくり動く平均) との差が山になったら 1 歩。山と山は 0.28 秒以上あける
+const Walk = { on:false, smooth:9.8, base:9.8, armed:true, last:0 };
+function onMotion(e) {
+  const a = e.accelerationIncludingGravity;
+  if (!a || a.x == null) return;
+  const m = Math.sqrt(a.x * a.x + a.y * a.y + a.z * a.z);
+  Walk.smooth = Walk.smooth * 0.75 + m * 0.25;
+  Walk.base = Walk.base * 0.97 + m * 0.03;
+  const d = Walk.smooth - Walk.base, now = performance.now();
+  if (Walk.armed && d > 1.3 && now - Walk.last > 280) {
+    Walk.armed = false; Walk.last = now;
+    steps++; localStorage.setItem("tcosmos.steps", String(steps));
+    if (navigator.vibrate && steps % 100 === 0) navigator.vibrate(20);
+    tick();
+  } else if (!Walk.armed && d < 0.3) Walk.armed = true;
+}
+let wake = null;
+async function keepScreen(on) {
+  try {
+    if (on && Walk.on && "wakeLock" in navigator && !wake) { wake = await navigator.wakeLock.request("screen"); wake.addEventListener("release", () => { wake = null; }); }
+    if (!on && wake) { await wake.release(); wake = null; }
+  } catch (e) { }
+}
+async function startWalk() {
+  if (!("DeviceMotionEvent" in window)) { $("walkText").textContent = t("walkNo"); return; }
+  try {
+    if (typeof DeviceMotionEvent.requestPermission === "function") {        // iPhone: 押したときに許可を聞く
+      const r = await DeviceMotionEvent.requestPermission();
+      if (r !== "granted") { $("walkText").textContent = t("walkDenied"); return; }
+    }
+  } catch (e) { $("walkText").textContent = t("walkDenied"); return; }
+  window.addEventListener("devicemotion", onMotion);
+  Walk.on = true; localStorage.setItem("tcosmos.walk", "1");
+  keepScreen($("keepOn").checked);
+  renderWalk();
+}
+function stopWalk() {
+  window.removeEventListener("devicemotion", onMotion);
+  Walk.on = false; localStorage.removeItem("tcosmos.walk");
+  keepScreen(false);
+  renderWalk();
+}
+function renderWalk() {
+  $("walkBtn").textContent = Walk.on ? t("walkStop") : t("walkStart");
+  $("walkBtn").className = "act " + (Walk.on ? "on" : "sub");
+  $("walkText").textContent = Walk.on ? t("walkOn", stepClicks) : t("walkOff", stepClicks);
+}
+document.addEventListener("visibilitychange", () => { if (!document.hidden && Walk.on) keepScreen($("keepOn").checked); tick(); });
+window.addEventListener("online", tick); window.addEventListener("offline", tick);
+
+$("title").textContent = "Taskbar Cosmos " + t("title");
+if (tk) {
+  $("play").style.display = "";
+  $("tLight").textContent = t("light"); $("tOut").textContent = t("out"); $("backBtn").textContent = t("back");
+  $("tWalk").textContent = t("walk"); $("tKeep").textContent = t("keep");
+  $("keepOn").checked = localStorage.getItem("tcosmos.keep") === "1";
+  $("keepOn").addEventListener("change", () => { localStorage.setItem("tcosmos.keep", $("keepOn").checked ? "1" : "0"); keepScreen($("keepOn").checked); });
+  $("walkBtn").addEventListener("click", () => { if (Walk.on) stopWalk(); else startWalk(); });
+  // Android などは、前に数えていたら続きから (iPhone は押すたびに許可が要る)
+  if (localStorage.getItem("tcosmos.walk") === "1" && typeof DeviceMotionEvent !== "undefined" && typeof DeviceMotionEvent.requestPermission !== "function") startWalk();
+  renderWalk();
+  $("star").addEventListener("pointerdown", e => {
+    e.preventDefault();
+    taps++;
+    localStorage.setItem("tcosmos.taps", String(taps));
+    const p = document.createElement("div"); p.className = "pop"; p.textContent = "+" + fmt(lg(tk.click));
+    $("star").appendChild(p); setTimeout(() => p.remove(), 900);
+    if (navigator.vibrate) navigator.vibrate(8);
+    tick();
+  });
+  // 返す: 家の PC のページへ移る (#back=...)。PC のページが受け取って、PC に光を入れる
+  $("backBtn").addEventListener("click", () => {
+    localStorage.setItem("tcosmos.sent", "1");
+    location.href = tk.home + "/#back=" + b64url(JSON.stringify({ v:1, id:tk.id, key:tk.key, taps, steps }));
+  });
+  tick();
+  setInterval(tick, 1000);
+} else {
+  $("none").style.display = "";
+  $("tNone").textContent = t("none"); $("noneText").textContent = t("noneText");
+}
+</script>
+</body>
+</html>
