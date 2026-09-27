@@ -17,6 +17,8 @@
   このファイルはゲームの中にも入っていて、家の Wi-Fi なら http://<PC>:51737/outside.html で開ける (ためし用。外では開けない)。
   ヘルスケアの歩数 (iPhone だけ): 「ショートカット」アプリの CosmosSteps が、持ち出してからの歩数をヘルスケアから読んで
   このページに返す (x-callback-url)。歩数は、動きのセンサーとヘルスケアの多いほうを使う (二重に数えない)。
+  PC の見た目: 券の look (単位・背景・ボタン・雰囲気・星・動きを控えめに) があれば、PC と同じ見た目にする。
+  背景と星の絵は skins/ (Mac 版の Assets/skins と同じ画像)。雰囲気の動きは Core/AmbientSim.cs、単位は Core/Notation.cs と同じ計算。
 -->
 <style>
   :root { --bg1:#0b1030; --text:#eef2ff; --dim:#a3aed0; --faint:#6e7899; --gold:#ffd36b; --cyan:#8ce0ff; --card:rgba(26,34,70,.85); --line:rgba(255,255,255,.12); }
@@ -32,8 +34,14 @@
   .num { font-size:44px; font-weight:700; color:#fff6dd; text-shadow:0 0 18px rgba(255,211,107,.35); }
   .rate { color:var(--dim); font-size:14px; }
   #star { margin:18px 0 6px; width:200px; height:200px; border:none; background:none; padding:0; position:relative; }
-  #star svg { width:100%; height:100%; filter:drop-shadow(0 0 22px rgba(140,224,255,.5)); transition:transform .08s; }
-  #star:active svg { transform:scale(.93); }
+  #star svg, #star img { width:100%; height:100%; filter:drop-shadow(0 0 22px rgba(140,224,255,.5)); transition:transform .08s; }
+  #star img { object-fit:contain; display:none; }
+  #star.img img { display:block; }
+  #star.img svg { display:none; }
+  #star:active svg, #star:active img { transform:scale(.93); }
+  #scene { position:fixed; inset:0; z-index:-2; background:center / cover no-repeat; display:none; }
+  #scene::after { content:""; position:absolute; inset:0; background:linear-gradient(rgba(8,11,32,.30), rgba(8,11,32,.62)); }
+  #amb { position:fixed; inset:0; z-index:-1; width:100%; height:100%; pointer-events:none; }
   .pop { position:absolute; left:50%; top:40%; color:var(--gold); font-weight:700; font-size:18px; pointer-events:none; animation:up .9s ease-out forwards; }
   @keyframes up { from { opacity:1; transform:translate(-50%,0); } to { opacity:0; transform:translate(-50%,-70px); } }
   .card { width:100%; max-width:440px; background:var(--card); border:1px solid var(--line); border-radius:16px; padding:14px 16px; margin-top:12px; }
@@ -42,9 +50,10 @@
   .walk { display:flex; align-items:center; gap:12px; }
   .walk .steps { font-size:30px; font-weight:700; color:var(--cyan); min-width:90px; }
   .walk .sub { color:var(--dim); font-size:12.5px; line-height:1.5; }
-  button.act { margin-top:12px; width:100%; border:none; border-radius:12px; padding:13px; font-size:15px; font-weight:700; font-family:inherit; color:#241a00; background:linear-gradient(#ffe29a,#ffc94d); }
-  button.sub { background:rgba(255,255,255,.08); color:var(--text); border:1px solid var(--line); }
-  button.on { background:linear-gradient(#b8f0ff,#6fd3ff); color:#062030; }
+  button.act { margin-top:12px; width:100%; border:none; border-radius:var(--btnR,12px); padding:13px; font-size:15px; font-weight:700; font-family:inherit;
+               color:var(--btnText,#241a00); background:var(--btnBg,linear-gradient(#ffe29a,#ffc94d)); box-shadow:var(--btnEdge,none); }
+  button.sub { background:rgba(255,255,255,.08); color:var(--text); border:1px solid var(--line); box-shadow:none; border-radius:12px; }
+  button.on { background:linear-gradient(#b8f0ff,#6fd3ff); color:#062030; box-shadow:none; border-radius:12px; }
   label.chk { display:flex; align-items:center; gap:8px; margin-top:10px; color:var(--dim); font-size:12.5px; }
   .hkline { margin:8px 0 0; color:var(--dim); font-size:12.5px; line-height:1.55; white-space:pre-line; }
   .hkline.warn { color:#ffb4a8; }
@@ -56,6 +65,8 @@
 </style>
 </head>
 <body>
+<div id="scene"></div>
+<canvas id="amb"></canvas>
 <h1><span id="title">Taskbar Cosmos</span><span class="net" id="net"></span></h1>
 
 <div id="play" style="display:none">
@@ -68,6 +79,7 @@
     <svg viewBox="0 0 100 100"><defs><radialGradient id="g" cx="50%" cy="45%" r="55%"><stop offset="0" stop-color="#f4fbff"/><stop offset=".55" stop-color="#8ce0ff"/><stop offset="1" stop-color="#6b7bff"/></radialGradient></defs>
       <circle cx="50" cy="50" r="30" fill="url(#g)"/>
       <path d="M50 8 L56 44 L92 50 L56 56 L50 92 L44 56 L8 50 L44 44 Z" fill="#ffffff" opacity=".9"/></svg>
+    <img id="starImg" alt="">
   </button>
   <div class="card">
     <h2 id="tWalk"></h2>
@@ -109,7 +121,7 @@ const T = {
         sensorAlt:"ヘルスケアを使わないで数える (画面をつけたまま)",
         hkRead:"ヘルスケア: {0} 歩 ({1} に読みました)。動きのセンサーとヘルスケアの、多いほうが入ります。",
         hkCapped:"多すぎる歩数は入りません (1 秒に {0} 歩まで)。",
-        hkErr:"ショートカットが動きませんでした。「{0}」という名前のショートカットがあるか、下の作り方で確かめてください。",
+        hkErr:"ショートカットが動きませんでした。「{0}」という名前のショートカットがあるか、下の作り方で確かめてください。「ヘルスケア項目を共有しようとしていますが、許可されていません」と出たときは、最後の「停止して出力」が 4 の「統計」(歩数の合計) になっているか確かめてください。",
         hkCancel:"ヘルスケアを読むのをやめました。",
         hkBad:"ヘルスケアから歩数を受け取れませんでした。ショートカットの最後が「{0}」になっているか確かめてください。",
         hkHome:"ホーム画面のアイコンから開いているときは使えません。Safari でこのページを開いてから押してください。",
@@ -120,7 +132,7 @@ const T = {
           "「アクションを検索」で <b>入力から日付を取得</b> を追加し、入力を <b>ショートカットの入力</b> にします (受け取る入力を聞かれたら「テキスト」)。",
           "<b>ヘルスケアのサンプルを検索</b> を追加して、種類を <b>歩数</b> にします。「フィルタを追加」で <b>開始日</b> が <b>次より後</b> → 2 の <b>日付</b> を選びます。「グループ化」は <b>時間</b> にします (Apple Watch と二重に数えないため)。",
           "<b>統計を計算</b> を追加して、<b>合計</b> にします (入力は 3 のヘルスケアサンプル)。",
-          "<b>停止して出力</b> を追加して、出力を 4 の <b>統計</b> にします。",
+          "<b>停止して出力</b> を追加して、出力を 4 の <b>統計</b> (歩数の合計の数) にします。3 の <b>ヘルスケアサンプル</b> のままだと「ヘルスケア項目を共有しようとしていますが、許可されていません」と出て動きません。",
           "このページの「ヘルスケアの歩数を読む」を押します。はじめは、ヘルスケアの歩数を読んでよいか聞かれるので「許可」を押します。",
           "アクションの名前は、iOS の版で少しちがうことがあります。見つからないときは「日付」「ヘルスケア」「統計」「出力」で検索してください。"
         ],
@@ -140,7 +152,7 @@ const T = {
         sensorAlt:"Count without Health (keep the screen on)",
         hkRead:"Health: {0} steps (read at {1}). The larger of the motion sensor and Health counts.",
         hkCapped:"Too many steps are not counted (up to {0} steps per second).",
-        hkErr:"The shortcut did not run. Check that you have a shortcut named \"{0}\" (see how to make it below).",
+        hkErr:"The shortcut did not run. Check that you have a shortcut named \"{0}\" (see how to make it below). If it said it is not allowed to share Health items, make sure the last \"Stop and Output\" outputs the Statistics (the total) from step 4.",
         hkCancel:"Reading from Health was cancelled.",
         hkBad:"No step count came back from Health. Check that the shortcut ends with \"{0}\".",
         hkHome:"This does not work when opened from the Home Screen icon. Open this page in Safari, then press it.",
@@ -151,7 +163,7 @@ const T = {
           "Search actions for <b>Get Dates from Input</b> and add it, with <b>Shortcut Input</b> as its input (if asked what it receives, choose Text).",
           "Add <b>Find Health Samples</b> with type <b>Steps</b>. Add a filter: <b>Start Date</b> <b>is after</b> the <b>Dates</b> from step 2. Set Group By to <b>Hour</b> (so an Apple Watch is not counted twice).",
           "Add <b>Calculate Statistics</b> set to <b>Sum</b> (of the Health Samples from step 3).",
-          "Add <b>Stop and Output</b> and output the <b>Statistics</b> from step 4.",
+          "Add <b>Stop and Output</b> and output the <b>Statistics</b> from step 4 (the total, a number). If it outputs the <b>Health Samples</b> from step 3, iOS says it is not allowed to share Health items and it will not work.",
           "Press \"Read steps from Health\" on this page. The first time, allow Shortcuts to read your steps from Health.",
           "Action names may differ slightly between iOS versions. If you cannot find one, search for \"date\", \"health\", \"statistics\" or \"output\"."
         ],
@@ -165,13 +177,42 @@ if ("serviceWorker" in navigator && window.isSecureContext) navigator.serviceWor
 // ---- 大きな数 (ゲームの数は 1e308 をこえるので、log10 で持つ) ----
 const lg = s => { if (!s || s === "0") return -Infinity; const i = s.indexOf("e"); return i < 0 ? Math.log10(+s) : Math.log10(+s.slice(0, i)) + (+s.slice(i + 1)); };
 const lgAdd = (a, b) => { if (a === -Infinity) return b; if (b === -Infinity) return a; const hi = Math.max(a, b), lo = Math.min(a, b); return hi + Math.log10(1 + Math.pow(10, lo - hi)); };
-const SUF = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No", "Dc"];
+// 単位: 0 = K・M、1 = 1e6、2 = 工学 (3 桁ごと)、3 = 万・億 (PC の設定の「数の表記」。券の look.num)
+let numMode = 0;
+const SMALL = ["", "K", "M", "B", "T", "Qa", "Qi", "Sx", "Sp", "Oc", "No"];
+const UNITS = ["", "U", "D", "T", "Qa", "Qi", "Sx", "Sp", "O", "N"];
+const TENS = ["", "Dc", "Vg", "Tg", "Qag", "Qig", "Sxg", "Spg", "Ocg", "Nog"];
+const HUNDREDS = ["", "Ce", "DCe", "TCe", "QaCe", "QiCe", "SxCe", "SpCe", "OCe", "NCe"];
+const JP = ["", "万", "億", "兆", "京", "垓", "秭", "穣", "溝", "澗", "正", "載", "極", "恒河沙", "阿僧祇", "那由他", "不可思議", "無量大数"];
+// v (1 ≤ v < 10^sig) を有効数字 sig 桁で切り捨て
+function trunc(v, sig) {
+  const before = v < 10 ? 1 : v < 100 ? 2 : v < 1000 ? 3 : 4, dec = Math.max(0, sig - before), sc = Math.pow(10, dec);
+  return (Math.floor(v * sc + 1e-7) / sc).toFixed(dec);
+}
+function fmtSmall(v) {
+  if (v <= 0) return "0";
+  if (v < 1) return String(Math.floor(v * 1000 + 1e-7) / 1000);
+  if (v < 10) return String(Math.floor(v * 100 + 1e-7) / 100);
+  if (v < 100) return String(Math.floor(v * 10 + 1e-7) / 10);
+  return String(Math.floor(v + 1e-7));
+}
+const expStr = e => e >= 100000 ? e.toLocaleString("en-US") : String(e);
+function stdSuffix(t) {
+  if (t < SMALL.length) return SMALL[t];
+  const i = t - 1;
+  return i >= 1000 ? null : UNITS[i % 10] + TENS[Math.floor(i / 10) % 10] + HUNDREDS[Math.floor(i / 100)];
+}
 function fmt(l) {
-  if (l === -Infinity) return "0";
-  if (l < 3) return (Math.floor(Math.pow(10, l) * 10) / 10).toString();
-  const g = Math.floor(l / 3);
-  if (g < SUF.length) return (Math.pow(10, l - g * 3)).toFixed(2) + SUF[g];
-  const e = Math.floor(l); return (Math.pow(10, l - e)).toFixed(2) + "e" + e;
+  if (l === -Infinity || !isFinite(l)) return "0";
+  let E = Math.floor(l), M = Math.pow(10, l - E);
+  if (M >= 10) { M /= 10; E++; }
+  if (E < 3) return fmtSmall(Math.pow(10, l));
+  const sci = () => trunc(M, 3) + "e" + expStr(E);
+  if (numMode === 1) return sci();
+  if (numMode === 2) { const r = ((E % 3) + 3) % 3; return trunc(M * Math.pow(10, r), 3) + "e" + expStr(E - r); }
+  if (numMode === 3) { const k = Math.floor(E / 4); return k >= JP.length ? sci() : trunc(M * Math.pow(10, E - 4 * k), 4) + JP[k]; }
+  const t = Math.floor(E / 3), suf = stdSuffix(t);
+  return suf == null ? sci() : trunc(M * Math.pow(10, E - 3 * t), 3) + suf;
 }
 const dur = s => { s = Math.floor(s); const h = Math.floor(s / 3600), m = Math.floor(s % 3600 / 60), x = s % 60; return (h ? h + ":" : "") + String(m).padStart(h ? 2 : 1, "0") + ":" + String(x).padStart(2, "0"); };
 const b64url = s => btoa(unescape(encodeURIComponent(s))).replace(/\+/g, "-").replace(/\//g, "_").replace(/=+$/, "");
@@ -201,6 +242,136 @@ const lang = tk && tk.lang === "en" ? "en" : (tk ? "ja" : ((navigator.language |
 const t = (k, ...a) => (T[lang][k] || k).replace(/\{(\d)\}/g, (_, i) => a[+i]);
 const stepClicks = tk && tk.stepClicks ? tk.stepClicks : 5;
 document.title = "Taskbar Cosmos " + t("title");
+
+// ---- PC の見た目 (券の look: 単位・背景・ボタン・雰囲気・星・動きを控えめに) ----
+// 知らない名前は使わない (ファイルの名前にするので、決まったものだけ)
+const LOOKS = {
+  bg: ["alt0", "alt1", "alt2", "alt3", "alt4", "alt5", "alt6", "alt7", "alt8", "alt9", "aurora", "blackhole", "dawn", "milkyway", "sakura", "sea", "sunset"],
+  star: ["star_orb", "star_sun", "star_sakura", "star_gem", "star_moon", "star_planet", "star_nova", "star_galaxy", "star_hole"],
+  amb: ["twinkle", "stardust", "firefly", "snow", "petals", "meteor"],
+};
+// ボタン (ゲームの SkinArt.Button と同じ色): 上・下・文字・角の丸み・ふち
+const BUTTONS = {
+  gold: ["#FFE08A", "#F6B24A", "#241803", 10], silver: ["#F4F6FA", "#AEB6C6", "#1B2030", 10],
+  rose: ["#FFD1E3", "#F48FB6", "#3A0C22", 16], jade: ["#A8F0CF", "#3FB887", "#07261A", 10],
+  ice: ["#E4F8FF", "#7CC8F0", "#062536", 4], night: ["#26315F", "#131A3A", "#FFD36B", 10, "inset 0 0 0 1.2px #FFD36B"],
+  crystal: ["rgba(255,255,255,.85)", "rgba(200,216,255,.44)", "#0E1430", 12, "inset 0 0 0 1px rgba(255,255,255,.8)"],
+  rainbow: ["linear-gradient(90deg,#FF9A9A,#FFD36B,#9CF5B8,#8CD2F5,#C2A8FF)", null, "#1B1530", 16],
+};
+const look = (() => {
+  const L = (tk && tk.look && typeof tk.look === "object") ? tk.look : {};
+  const pick = (v, list, d) => list.indexOf(v) >= 0 ? v : d;
+  return {
+    num: [0, 1, 2, 3].indexOf(L.num) >= 0 ? L.num : 0,
+    bg: pick(L.bg, LOOKS.bg, null),
+    star: pick(L.star, LOOKS.star, "star_orb"),
+    amb: pick(L.amb, LOOKS.amb, "twinkle"),
+    btn: Object.prototype.hasOwnProperty.call(BUTTONS, L.btn) ? L.btn : "gold",
+    calm: L.calm === true,
+  };
+})();
+numMode = look.num;
+
+function applyLook() {
+  if (look.bg) {
+    $("scene").style.backgroundImage = "url(skins/bg_" + look.bg + ".jpg)";
+    $("scene").style.display = "block";
+  }
+  const img = $("starImg");
+  img.onload = () => $("star").classList.add("img");
+  img.src = "skins/" + look.star + ".png";              // 読めなければ、いままでの星 (SVG) のまま
+  const b = BUTTONS[look.btn], st = document.documentElement.style;
+  st.setProperty("--btnBg", b[1] ? "linear-gradient(" + b[0] + "," + b[1] + ")" : b[0]);
+  st.setProperty("--btnText", b[2]);
+  st.setProperty("--btnR", b[3] + "px");
+  st.setProperty("--btnEdge", b[4] || "none");
+  Amb.start(look.amb, look.calm);
+}
+
+// ---- 雰囲気 (ゲームの Core/AmbientSim.cs と同じ動き・色。最後にさわってから AwakeSec 秒だけ動く) ----
+const Amb = {
+  fps: 12, awakeSec: 8,
+  kind: "twinkle", ps: [], t: 0, w: 0, h: 0, next: 0, until: 0, timer: 0, still: false,
+  start(kind, calm) {
+    this.kind = kind; this.still = calm;
+    if (kind === "twinkle") return;                       // またたきは、動くものがない
+    const c = $("amb"), dpr = Math.min(2, window.devicePixelRatio || 1);
+    this.w = window.innerWidth; this.h = window.innerHeight;
+    c.width = this.w * dpr; c.height = this.h * dpr;
+    this.ctx = c.getContext("2d"); this.ctx.setTransform(dpr, 0, 0, dpr, 0, 0);
+    this.seed();
+    this.t = 1.3; this.draw();                              // まず止まった 1 コマ
+    if (calm) return;                                       // 「動きを控えめに」なら動かさない
+    const wake = () => { this.until = performance.now() + this.awakeSec * 1000; if (!this.timer) this.loop(); };
+    ["pointerdown", "touchstart", "scroll"].forEach(ev => window.addEventListener(ev, wake, { passive: true }));
+    document.addEventListener("visibilitychange", () => { if (!document.hidden) wake(); });
+    wake();
+  },
+  r() { return Math.random(); },
+  seed() {
+    const w = this.w, h = this.h, r = () => this.r(), ps = this.ps = [];
+    if (this.kind === "firefly") for (let i = 0; i < 9; i++) ps.push({ x: w * (0.08 + 0.84 * r()), y: h * (0.15 + 0.75 * r()), ph: r() * 6.28 });
+    if (this.kind === "snow") for (let i = 0; i < 18; i++) ps.push({ x: r() * w, y: r() * h, vy: 12 + r() * 14, ph: r() * 6.28, s: 1 + r() * 1.4, a: 150 + Math.floor(r() * 90) });
+    if (this.kind === "petals") for (let i = 0; i < 12; i++) ps.push({ x: r() * w, y: r() * h, vy: 16 + r() * 14, vx: 6 + r() * 8, rot: r() * 360, ph: 60 + r() * 70, a: 170 + Math.floor(r() * 70) });
+    if (this.kind === "stardust") for (let i = 0; i < 10; i++) ps.push({ x: r() * w, y: r() * h, life: 1.4 + r() * 0.8, age: r() * 1.4, s: 3 + r() * 3, ph: Math.floor(r() * 2) });
+    if (this.kind === "meteor") { this.next = 0.4; ps.push({ x: w * 0.72, y: h * 0.3, vx: -1, vy: 0.58, age: 0.3, life: 0.7 }); }
+  },
+  step(dt) {
+    const w = this.w, h = this.h, ps = this.ps, r = () => this.r();
+    this.t += dt;
+    for (let i = ps.length - 1; i >= 0; i--) {
+      const p = ps[i];
+      if (this.kind === "snow") { p.y += p.vy * dt; if (p.y > h + 4) { p.y = -4; p.x = r() * w; } }
+      if (this.kind === "petals") { p.y += p.vy * dt; p.x += p.vx * dt; p.rot += p.ph * dt; if (p.y > h + 6 || p.x > w + 6) { p.y = -6; p.x = r() * w - w * 0.2; } }
+      if (this.kind === "stardust") { p.age += dt; if (p.age > p.life) { p.age = 0; p.x = r() * w; p.y = r() * h; } }
+      if (this.kind === "meteor") { p.age += dt; p.x += p.vx * 260 * dt; p.y += p.vy * 260 * dt; if (p.age > p.life) ps.splice(i, 1); }
+    }
+    if (this.kind === "meteor") {
+      this.next -= dt;
+      if (this.next <= 0 && ps.length < 2) { this.next = 1.2 + r() * 1.4; ps.push({ x: w * (0.35 + r() * 0.7), y: -6 + r() * h * 0.3, vx: -1, vy: 0.58, age: 0, life: 0.75 }); }
+    }
+  },
+  draw() {
+    const g = this.ctx, T = this.t;
+    if (!g) return;
+    g.clearRect(0, 0, this.w, this.h);
+    const fade = p => Math.sin(Math.PI * Math.min(1, p.age / p.life));
+    for (const p of this.ps) {
+      if (this.kind === "firefly") {
+        const x = p.x + 22 * Math.sin(T * 0.5 + p.ph) + 9 * Math.sin(T * 1.3 + p.ph * 2), y = p.y + 14 * Math.sin(T * 0.7 + p.ph * 1.7);
+        const b = 0.3 + 0.7 * (0.5 + 0.5 * Math.sin(T * 2.2 + p.ph * 3));
+        const gr = g.createRadialGradient(x, y, 0, x, y, 8);
+        gr.addColorStop(0, "rgba(200,255,120," + (0.67 * b) + ")"); gr.addColorStop(1, "rgba(200,255,120,0)");
+        g.fillStyle = gr; g.beginPath(); g.arc(x, y, 8, 0, 6.2832); g.fill();
+        g.fillStyle = "rgba(240,255,190," + b + ")"; g.beginPath(); g.arc(x, y, 1.5, 0, 6.2832); g.fill();
+      } else if (this.kind === "snow") {
+        g.fillStyle = "rgba(255,255,255," + (p.a / 255) + ")"; g.beginPath(); g.arc(p.x + 6 * Math.sin(T * 0.9 + p.ph), p.y, p.s, 0, 6.2832); g.fill();
+      } else if (this.kind === "petals") {
+        g.save(); g.translate(p.x, p.y); g.rotate(p.rot * Math.PI / 180);
+        g.fillStyle = "rgba(255,190,214," + (p.a / 255) + ")"; g.beginPath(); g.ellipse(0, 0, 4.4, 2.4, 0, 0, 6.2832); g.fill(); g.restore();
+      } else if (this.kind === "stardust") {
+        const k = fade(p); if (k <= 0.02) continue;
+        const len = p.s * (0.6 + 0.4 * k), w = len * 0.2;
+        g.fillStyle = (p.ph < 1 ? "rgba(200,170,255," : "rgba(255,222,150,") + (0.9 * k) + ")";
+        g.beginPath(); g.moveTo(p.x, p.y - len); g.lineTo(p.x + w, p.y - w); g.lineTo(p.x + len, p.y); g.lineTo(p.x + w, p.y + w);
+        g.lineTo(p.x, p.y + len); g.lineTo(p.x - w, p.y + w); g.lineTo(p.x - len, p.y); g.lineTo(p.x - w, p.y - w); g.closePath(); g.fill();
+      } else if (this.kind === "meteor") {
+        const k = fade(p), tx = p.x - p.vx * 34, ty = p.y - p.vy * 34;
+        const gr = g.createLinearGradient(tx, ty, p.x, p.y);
+        gr.addColorStop(0, "rgba(255,240,200,0)"); gr.addColorStop(1, "rgba(255,250,235," + (0.9 * k) + ")");
+        g.strokeStyle = gr; g.lineWidth = 1.6; g.lineCap = "round"; g.beginPath(); g.moveTo(tx, ty); g.lineTo(p.x, p.y); g.stroke();
+        g.fillStyle = "rgba(255,252,240," + (0.98 * k) + ")"; g.beginPath(); g.arc(p.x, p.y, 1.5, 0, 6.2832); g.fill();
+      }
+    }
+  },
+  loop() {
+    this.timer = setTimeout(() => {
+      this.timer = 0;
+      if (document.hidden || performance.now() > this.until) return;   // さわっていないあいだは止まる (電池のため)
+      this.step(1 / this.fps); this.draw(); this.loop();
+    }, 1000 / this.fps);
+  },
+};
 
 // ---- ヘルスケアの歩数 (iPhone だけ) ----
 // ページ → 「ショートカット」アプリの HK.name (持ち出した時刻を渡す) → ヘルスケアで歩数を合計 → このページに ?hk=<券>&result=<歩数> で戻る
@@ -351,6 +522,7 @@ window.addEventListener("online", tick); window.addEventListener("offline", tick
 $("title").textContent = "Taskbar Cosmos " + t("title");
 if (tk) {
   $("play").style.display = "";
+  applyLook();
   $("tLight").textContent = t("light"); $("tOut").textContent = t("out"); $("backBtn").textContent = t("back");
   $("tWalk").textContent = t("walk"); $("tKeep").textContent = t("keep");
   $("keepOn").checked = localStorage.getItem("tcosmos.keep") === "1";
