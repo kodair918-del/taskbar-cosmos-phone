@@ -72,12 +72,14 @@
   <div class="card">
     <h2 id="tWalk"></h2>
     <div class="walk"><div class="steps" id="steps">0</div><div class="sub" id="walkText"></div></div>
-    <button class="act sub" id="walkBtn"></button>
-    <label class="chk"><input type="checkbox" id="keepOn"><span id="tKeep"></span></label>
     <div id="hk" style="display:none">
-      <button class="act sub" id="hkBtn"></button>
+      <button class="act" id="hkBtn"></button>
       <p class="hkline" id="hkText"></p>
       <details class="how"><summary id="hkHow"></summary><ol id="hkSteps"></ol></details>
+    </div>
+    <div id="sensor">
+      <button class="act sub" id="walkBtn"></button>
+      <label class="chk"><input type="checkbox" id="keepOn"><span id="tKeep"></span></label>
     </div>
   </div>
   <div class="card">
@@ -102,7 +104,9 @@ const T = {
         none:"持ち出していません", noneText:"PC と同じ Wi-Fi で、スマホのページの「スマホに持ち出す」を押すと、ここで遊べます。",
         sent:"PC に返しに行きました。PC のページに「おかえりなさい」が出たら終わりです。うまくいかなかったら、もう一度押せます。",
         hkBtn:"ヘルスケアの歩数を読む",
-        hkIntro:"iPhone の「ヘルスケア」から、持ち出してから歩いた歩数を読めます (ポケットの中で画面が消えていても、iPhone が数えた歩数が全部入ります)。はじめに、下の作り方でショートカットを 1 つ作ってください。",
+        hkIntro:"iPhone の「ヘルスケア」から、持ち出してから歩いた歩数を読めます (ポケットの中で画面が消えていても、iPhone が数えた歩数が全部入ります。日付が変わっても大丈夫です)。はじめに、下の作り方でショートカットを 1 つ作ってください。",
+        hkWalk:"画面を消して、ポケットに入れたまま歩いて大丈夫。戻ってきたら「ヘルスケアの歩数を読む」を押すと、持ち出してから歩いたぶんが光になります (日付が変わっても大丈夫)。",
+        sensorAlt:"ヘルスケアを使わないで数える (画面をつけたまま)",
         hkRead:"ヘルスケア: {0} 歩 ({1} に読みました)。動きのセンサーとヘルスケアの、多いほうが入ります。",
         hkCapped:"多すぎる歩数は入りません (1 秒に {0} 歩まで)。",
         hkErr:"ショートカットが動きませんでした。「{0}」という名前のショートカットがあるか、下の作り方で確かめてください。",
@@ -131,7 +135,9 @@ const T = {
         none:"Nothing taken out", noneText:"On the same Wi-Fi as the PC, press \"Take it on my phone\" on the phone page to play here.",
         sent:"Sent back to the PC. When the PC page says \"Welcome back\", you're done. If it failed, you can press it again.",
         hkBtn:"Read steps from Health",
-        hkIntro:"Read the steps you walked since you took the game out from the iPhone Health app (every step your iPhone counted, even with the screen off in your pocket). First, make one shortcut with the steps below.",
+        hkIntro:"Read the steps you walked since you took the game out from the iPhone Health app (every step your iPhone counted, even with the screen off in your pocket, and even past midnight). First, make one shortcut with the steps below.",
+        hkWalk:"Walk with the screen off in your pocket. When you are back, press \"Read steps from Health\" and every step since you took the game out becomes light (even past midnight).",
+        sensorAlt:"Count without Health (keep the screen on)",
         hkRead:"Health: {0} steps (read at {1}). The larger of the motion sensor and Health counts.",
         hkCapped:"Too many steps are not counted (up to {0} steps per second).",
         hkErr:"The shortcut did not run. Check that you have a shortcut named \"{0}\" (see how to make it below).",
@@ -247,6 +253,16 @@ if (location.search.indexOf("hk=") >= 0) {
 function renderHealth() {
   if (!isIOS) return;                                                // ショートカットは iPhone・iPad だけ
   $("hk").style.display = "";
+  // 画面をつけたまま数えるしくみ (動きのセンサー) は、ヘルスケアを使わないときのために、たたんでしまっておく
+  if (!$("sensorBox")) {
+    const box = document.createElement("details"), sum = document.createElement("summary");
+    box.className = "how"; box.id = "sensorBox";
+    sum.textContent = t("sensorAlt");
+    box.appendChild(sum);
+    $("sensor").parentNode.insertBefore(box, $("sensor"));
+    box.appendChild($("sensor"));
+    if (Walk.on) box.open = true;
+  }
   $("hkBtn").textContent = t("hkBtn");
   $("hkHow").textContent = t("hkHow");
   $("hkSteps").innerHTML = T[lang].hkSteps.map(x => "<li>" + x.replace("{0}", HK.name) + "</li>").join("");
@@ -327,7 +343,7 @@ function stopWalk() {
 function renderWalk() {
   $("walkBtn").textContent = Walk.on ? t("walkStop") : t("walkStart");
   $("walkBtn").className = "act " + (Walk.on ? "on" : "sub");
-  $("walkText").textContent = Walk.on ? t("walkOn", stepClicks) : t("walkOff", stepClicks);
+  $("walkText").textContent = Walk.on ? t("walkOn", stepClicks) : isIOS ? t("hkWalk") : t("walkOff", stepClicks);
 }
 document.addEventListener("visibilitychange", () => { if (!document.hidden && Walk.on) keepScreen($("keepOn").checked); tick(); });
 window.addEventListener("online", tick); window.addEventListener("offline", tick);

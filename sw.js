@@ -1,6 +1,6 @@
 // Taskbar Cosmos おでかけページのサービスワーカー: 一度開いたページのファイルを覚えておき、電波がなくても開けるようにする。
 // VERSION は make_site.py が、ページの中身から作る (中身が変わると、新しいものに入れかわる)。
-const VERSION = "e3dbef195b39";
+const VERSION = "86afd0ca164f";
 const CACHE = "tcosmos-outing-" + VERSION;
 const FILES = ["./", "./index.html", "./manifest.webmanifest", "./icon-192.png", "./icon-512.png"];
 
